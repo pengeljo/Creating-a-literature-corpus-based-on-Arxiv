@@ -115,8 +115,12 @@ class QueryBuilder:
     def _build_date_filter(self) -> str | None:
         """Build the date filter for arXiv API.
 
-        arXiv uses submittedDate field with format YYYYMMDDHHMMSS.
+        arXiv uses submittedDate field with format YYYYMMDDHHMM.
         The range syntax is: submittedDate:[from TO to]
+
+        Note: arXiv doesn't support wildcards (*) in date ranges, so we use
+        far-past (1991) and far-future (2099) dates for open-ended ranges.
+        arXiv started in 1991, so 199101010000 covers all papers.
 
         Returns:
             Date filter string or None if no date filtering configured.
@@ -127,9 +131,10 @@ class QueryBuilder:
         if not date_from and not date_to:
             return None
 
-        # Convert YYYY-MM-DD to YYYYMMDD0000 format for arXiv
-        from_str = "*"
-        to_str = "*"
+        # Use boundary dates for open-ended ranges (arXiv doesn't support *)
+        # arXiv started in 1991
+        from_str = "199101010000"
+        to_str = "209912312359"
 
         if date_from:
             # Remove dashes and add time component (start of day)

@@ -17,8 +17,8 @@ search:
   categories:
     - "cs.AI"
     - "cs.CL"
-  # Date filtering temporarily disabled - arXiv API issues with submittedDate
-  # date_from: "2024-01-01"
+  # Only papers from 2024 onwards
+  date_from: "2024-01-01"
 
 download:
   concurrency: 2

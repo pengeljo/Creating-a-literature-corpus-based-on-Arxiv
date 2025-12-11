@@ -99,7 +99,7 @@ class TestQueryBuilder:
         queries = builder.build_queries()
 
         assert len(queries) == 1
-        assert "submittedDate:[202401010000 TO *]" in queries[0].query_string
+        assert "submittedDate:[202401010000 TO 209912312359]" in queries[0].query_string
 
     def test_build_queries_with_date_to(self) -> None:
         """Test that date_to filter is included in query."""
@@ -111,7 +111,7 @@ class TestQueryBuilder:
         queries = builder.build_queries()
 
         assert len(queries) == 1
-        assert "submittedDate:[* TO 202406302359]" in queries[0].query_string
+        assert "submittedDate:[199101010000 TO 202406302359]" in queries[0].query_string
 
     def test_build_queries_with_date_range(self) -> None:
         """Test that both date filters are included in query."""
@@ -139,7 +139,7 @@ class TestQueryBuilder:
         assert len(queries) == 1
         query = queries[0].query_string
         assert "cat:cs.AI" in query
-        assert "submittedDate:[202401010000 TO *]" in query
+        assert "submittedDate:[202401010000 TO 209912312359]" in query
 
 
 class TestQuery:
