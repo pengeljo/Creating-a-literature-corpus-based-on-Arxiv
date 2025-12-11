@@ -279,6 +279,21 @@ paths:
   output: /mnt/storage/arxiv/output
 ```
 
+### Analysis Notebooks
+
+Jupyter notebooks are provided for corpus exploration and analysis:
+
+```bash
+# Install notebook dependencies
+pip install -e ".[notebooks]"
+
+# Start Jupyter
+jupyter lab notebooks/
+```
+
+Available notebooks:
+- `corpus_analysis.ipynb` - Descriptive statistics and visualizations of the corpus
+
 ## Project Structure
 
 ```

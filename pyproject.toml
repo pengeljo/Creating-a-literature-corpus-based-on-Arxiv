@@ -82,6 +82,15 @@ dev = [
     "pandas-stubs>=2.0.0",
 ]
 
+# Optional: Jupyter notebooks for analysis
+notebooks = [
+    "jupyter>=1.0.0",
+    "jupyterlab>=4.0.0",
+    "matplotlib>=3.8.0",
+    "seaborn>=0.13.0",
+    "ipywidgets>=8.0.0",
+]
+
 [project.scripts]
 arxiv-corpus = "arxiv_corpus.cli:main"
 
