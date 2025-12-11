@@ -29,6 +29,7 @@ A generic, reusable system for creating literature corpora from arXiv and analyz
 
 - Python 3.12+
 - MongoDB 7.0+ (or use Docker)
+- Qdrant 1.9+ (or use Docker) - for semantic search
 - Docker & Docker Compose (optional, for containerized setup)
 
 ### Setup
@@ -69,20 +70,47 @@ A generic, reusable system for creating literature corpora from arXiv and analyz
 ## Quick Start
 
 1. **Configure your search** in `config/project.yaml`:
+
+   The search system builds queries from combinations of three term lists:
+   - **base_terms**: Core concepts (appear in all queries)
+   - **attributes**: Characteristics or components to combine with base terms
+   - **domains**: Fields or contexts to search within
+
+   Example research question: *"Are there texts in computer science that describe
+   systems called 'agents' in the philosophical sense?"*
+
    ```yaml
    project:
-     name: "my-research-corpus"
+     name: "agent-systems-corpus"
+     description: "Literature on agent systems and architectures"
 
    search:
      base_terms:
-       - "machine learning"
+       - "agent"
      attributes:
-       - "neural network"
-       - "deep learning"
+       # System components and characteristics
+       - "action"
+       - "goal"
+       - "memory"
+       - "state"
+       - "environment"
+       - "policy"
+       - "reward"
+       - "prompt"
+       - "module"
+       - "history"
      domains:
-       - "natural language processing"
-     max_results_per_query: 500
+       # Fields and paradigms
+       - "reinforcement learning"
+       - "autonomous"
+       - "LLM"
+       - "simulation"
+       - "AGI"
+     max_results_per_query: 1000
    ```
+
+   This generates 50 query combinations (1 base × 10 attributes × 5 domains),
+   searching for papers like "agent + goal + reinforcement learning".
 
 2. **Run the pipeline**:
    ```bash
@@ -98,8 +126,8 @@ A generic, reusable system for creating literature corpora from arXiv and analyz
    # Generate embeddings for semantic search
    arxiv-corpus embed generate -c config/project.yaml
 
-   # Search your corpus
-   arxiv-corpus search "attention mechanisms in transformers" -c config/project.yaml
+   # Search your corpus semantically
+   arxiv-corpus search "goal-directed behavior in autonomous systems" -c config/project.yaml
 
    # Extract text and run NLP analysis
    arxiv-corpus process extract -c config/project.yaml
@@ -276,4 +304,4 @@ MIT
 
 ## Acknowledgments
 
-Originally inspired by the [Concepts in Motion](https://conceptsinmotion.org/) methodology for studying concepts in academic literature.
+This project is based on research performed by Maud van Lier. Her data-driven study looked at the representation of agents/agency in computer science texts (and related fields) using the arxiv document repository. As she noted, her work was originally inspired by the [Concepts in Motion](https://conceptsinmotion.org/) methodology for studying concepts in academic literature.
