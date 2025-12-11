@@ -197,10 +197,10 @@ class SemanticChunker:
             headings = []
             captions = []
 
-            if hasattr(docling_chunk, "meta"):
-                if hasattr(docling_chunk.meta, "headings"):
+            if hasattr(docling_chunk, "meta") and docling_chunk.meta:
+                if hasattr(docling_chunk.meta, "headings") and docling_chunk.meta.headings:
                     headings = [h for h in docling_chunk.meta.headings if h]
-                if hasattr(docling_chunk.meta, "captions"):
+                if hasattr(docling_chunk.meta, "captions") and docling_chunk.meta.captions:
                     captions = [c for c in docling_chunk.meta.captions if c]
 
             # Extract page number if available

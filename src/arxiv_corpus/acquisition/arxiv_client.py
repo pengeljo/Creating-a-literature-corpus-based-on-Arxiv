@@ -16,7 +16,7 @@ from arxiv_corpus.utils.logging import get_logger
 logger = get_logger(__name__)
 
 # arXiv API constants
-ARXIV_API_URL = "http://export.arxiv.org/api/query"
+ARXIV_API_URL = "https://export.arxiv.org/api/query"
 ARXIV_PDF_URL = "https://arxiv.org/pdf/{arxiv_id}.pdf"
 ARXIV_NS = {"atom": "http://www.w3.org/2005/Atom", "arxiv": "http://arxiv.org/schemas/atom"}
 

@@ -664,7 +664,7 @@ def embed_generate(ctx: click.Context, status: str, recreate: bool) -> None:
 
     from arxiv_corpus.embeddings import SemanticChunker, create_embedder, create_vector_store
     from arxiv_corpus.storage import Database
-    from arxiv_corpus.storage.models import PaperStatus
+    from arxiv_corpus.storage.models import Paper, PaperStatus
     from arxiv_corpus.utils.logging import ProgressLogger
 
     db = Database(settings.database)
@@ -688,7 +688,10 @@ def embed_generate(ctx: click.Context, status: str, recreate: bool) -> None:
         if status == "converted":
             papers = list(db.get_papers_by_status(PaperStatus.CONVERTED))
         else:
-            papers = [p for p in db.papers.find() if p.get("pdf_path")]
+            # Get all papers with pdf_path as Paper models
+            papers = [
+                Paper.from_mongo(p) for p in db.papers.find({"pdf_path": {"$ne": None}})
+            ]
 
         if not papers:
             console.print("[yellow]No papers to embed.[/yellow]")
@@ -702,19 +705,11 @@ def embed_generate(ctx: click.Context, status: str, recreate: bool) -> None:
         total_chunks = 0
 
         with ProgressLogger("Generating embeddings", total=len(papers)) as progress:
-            for paper_doc in papers:
-                paper = (
-                    paper_doc if hasattr(paper_doc, "arxiv_id") else type("Paper", (), paper_doc)()
-                )
-
+            for paper in papers:
                 try:
-                    pdf_path = (
-                        paper.pdf_path if hasattr(paper, "pdf_path") else paper_doc.get("pdf_path")
-                    )
-                    arxiv_id = (
-                        paper.arxiv_id if hasattr(paper, "arxiv_id") else paper_doc.get("arxiv_id")
-                    )
-                    paper_id = str(paper_doc.get("_id", arxiv_id))
+                    pdf_path = paper.pdf_path
+                    arxiv_id = paper.arxiv_id
+                    paper_id = str(paper.id) if paper.id else arxiv_id
 
                     if not pdf_path:
                         continue
@@ -739,12 +734,7 @@ def embed_generate(ctx: click.Context, status: str, recreate: bool) -> None:
                     total_chunks += len(chunks)
 
                 except Exception as e:
-                    arxiv_id = (
-                        paper.arxiv_id
-                        if hasattr(paper, "arxiv_id")
-                        else paper_doc.get("arxiv_id", "unknown")
-                    )
-                    logger.error(f"Failed to embed {arxiv_id}: {e}")
+                    logger.error(f"Failed to embed {paper.arxiv_id}: {e}")
                     failed += 1
 
                 progress.update()

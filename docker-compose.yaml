@@ -29,7 +29,7 @@ services:
 
   # Qdrant vector database for RAG/embeddings
   qdrant:
-    image: qdrant/qdrant:v1.9.0
+    image: qdrant/qdrant:v1.12.0
     container_name: arxiv-corpus-qdrant
     restart: unless-stopped
     ports:

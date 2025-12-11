@@ -265,13 +265,14 @@ class QdrantVectorStore(VectorStore):
                 )
             qdrant_filter = Filter(must=conditions)
 
-        results = self.client.search(
+        # Use query_points (new API in qdrant-client >= 1.7.0) instead of search
+        results = self.client.query_points(
             collection_name=self.config.collection_name,
-            query_vector=query_embedding,
+            query=query_embedding,
             limit=top_k,
             score_threshold=score_threshold,
             query_filter=qdrant_filter,
-        )
+        ).points
 
         stored_chunks = []
         for result in results:
