@@ -34,8 +34,8 @@ dependencies = [
     # NLP
     "spacy>=3.7.0",
 
-    # PDF Processing
-    "pdfplumber>=0.11.0",
+    # Document Processing (Docling for PDF/DOCX/etc)
+    "docling>=2.15.0",
 
     # Data Processing
     "pandas>=2.2.0",
@@ -134,7 +134,8 @@ plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
 module = [
-    "pdfplumber.*",
+    "docling.*",
+    "docling_core.*",
     "spacy.*",
 ]
 ignore_missing_imports = true

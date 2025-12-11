@@ -13,24 +13,31 @@ A generic, reusable system for creating literature corpora from arXiv papers and
 
 ### Pipeline Flow
 ```
-Query arXiv API → Download PDFs → Extract Text → NLP Analysis → Term Search → Export
+Query arXiv API → Download PDFs → Convert (Docling) → Extract Text → NLP Analysis → Term Search → Export
 ```
 
 ### Module Structure
 - `src/arxiv_corpus/acquisition/` - arXiv API client and query building
-- `src/arxiv_corpus/preprocessing/` - PDF extraction, text cleaning, spaCy NLP
+- `src/arxiv_corpus/preprocessing/` - Document conversion (Docling), text cleaning, spaCy NLP
+  - `document_converter.py` - AI-powered PDF processing with Docling
+  - `text_cleaner.py` - Text normalization and section filtering
+  - `nlp_processor.py` - spaCy-based tokenization and NLP
 - `src/arxiv_corpus/analysis/` - Term expansion, paragraph search
 - `src/arxiv_corpus/export/` - Excel, CSV, JSON export
 - `src/arxiv_corpus/storage/` - MongoDB models and database operations
+  - `models.py` - Rich document models (Paper, Paragraph, Table, Figure)
 - `src/arxiv_corpus/cli.py` - Click-based CLI
 
 ### Key Technologies
 - **Python 3.12** - Modern type hints
+- **Docling** - AI-powered document conversion (replaces pdfplumber)
+  - DocLayNet model for layout analysis
+  - TableFormer for table structure recognition
+  - Exports to Markdown, JSON, text
 - **spaCy** - NLP processing (replacing FoLiA)
 - **MongoDB** - Document storage
 - **Click** - CLI framework
 - **Pydantic** - Configuration validation
-- **pdfplumber** - PDF text extraction
 
 ## Development Commands
 
@@ -70,9 +77,23 @@ arxiv-corpus query run --dry-run -c config/project.yaml
 # Full pipeline
 arxiv-corpus query run -c config/project.yaml
 arxiv-corpus download papers -c config/project.yaml
+arxiv-corpus process convert -c config/project.yaml --output-format both  # NEW: Docling conversion
 arxiv-corpus process extract -c config/project.yaml
 arxiv-corpus process analyze -c config/project.yaml
 arxiv-corpus export papers -c config/project.yaml
+```
+
+### Document Conversion Options
+
+```bash
+# Convert to markdown only (default)
+arxiv-corpus process convert -c config/project.yaml
+
+# Convert to JSON (preserves full structure including bounding boxes)
+arxiv-corpus process convert -c config/project.yaml --output-format json
+
+# Convert to both markdown and JSON
+arxiv-corpus process convert -c config/project.yaml --output-format both
 ```
 
 ## Configuration

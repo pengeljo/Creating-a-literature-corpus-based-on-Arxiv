@@ -1,11 +1,16 @@
 """Data models for MongoDB documents."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import Enum
 from typing import Any
 
 from bson import ObjectId
 from pydantic import BaseModel, ConfigDict, Field
+
+
+def utcnow() -> datetime:
+    """Get current UTC datetime (timezone-aware)."""
+    return datetime.now(UTC)
 
 
 class PyObjectId(ObjectId):
@@ -45,8 +50,9 @@ class PaperStatus(str, Enum):
 
     DISCOVERED = "discovered"
     DOWNLOADED = "downloaded"
-    EXTRACTED = "extracted"
-    PROCESSED = "processed"
+    CONVERTED = "converted"  # Docling conversion complete
+    EXTRACTED = "extracted"  # Text extraction complete
+    PROCESSED = "processed"  # NLP processing complete
     ERROR = "error"
 
 
@@ -55,6 +61,21 @@ class Author(BaseModel):
 
     name: str
     affiliation: str | None = None
+
+
+class DocumentMetrics(BaseModel):
+    """Metrics about a converted document (from Docling)."""
+
+    num_pages: int = 0
+    num_elements: int = 0
+    num_paragraphs: int = 0
+    num_sections: int = 0
+    num_tables: int = 0
+    num_figures: int = 0
+    num_formulas: int = 0
+    num_code_blocks: int = 0
+    word_count: int = 0
+    char_count: int = 0
 
 
 class Paper(BaseModel):
@@ -73,12 +94,16 @@ class Paper(BaseModel):
     pdf_url: str | None = None
     pdf_path: str | None = None
     text_path: str | None = None
+    markdown_path: str | None = None  # New: Docling markdown output
+    json_path: str | None = None  # New: Docling JSON output
     status: PaperStatus = PaperStatus.DISCOVERED
     search_queries: list[str] = Field(default_factory=list)
     occurrence_count: int = 0
+    document_metrics: DocumentMetrics | None = None  # New: Document metrics from Docling
+    sections: list[str] = Field(default_factory=list)  # New: List of section titles
     error_message: str | None = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utcnow)
+    updated_at: datetime = Field(default_factory=utcnow)
 
     def to_mongo(self) -> dict[str, Any]:
         """Convert to MongoDB document format."""
@@ -114,8 +139,34 @@ class TermHit(BaseModel):
     count: int
 
 
+class BoundingBoxModel(BaseModel):
+    """Bounding box for document elements."""
+
+    left: float
+    top: float
+    right: float
+    bottom: float
+    page: int
+
+
+class ElementType(str, Enum):
+    """Types of document elements."""
+
+    TITLE = "title"
+    SECTION_HEADER = "section_header"
+    PARAGRAPH = "paragraph"
+    LIST_ITEM = "list_item"
+    TABLE = "table"
+    FIGURE = "figure"
+    CAPTION = "caption"
+    FOOTNOTE = "footnote"
+    CODE = "code"
+    FORMULA = "formula"
+    UNKNOWN = "unknown"
+
+
 class Paragraph(BaseModel):
-    """Paragraph document model."""
+    """Paragraph document model with rich metadata from Docling."""
 
     model_config = ConfigDict(populate_by_name=True, arbitrary_types_allowed=True)
 
@@ -124,12 +175,62 @@ class Paragraph(BaseModel):
     arxiv_id: str
     paragraph_index: int
     text: str
+    element_type: ElementType = ElementType.PARAGRAPH  # New: Element type from Docling
+    section_title: str | None = None  # New: Which section this belongs to
+    section_level: int = 0  # New: Section hierarchy level
     tokens: list[TokenInfo] = Field(default_factory=list)
     sentence_count: int = 0
     word_count: int = 0
+    bbox: BoundingBoxModel | None = None  # New: Bounding box from Docling
     hits: list[TermHit] = Field(default_factory=list)
     total_hits: int = 0
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utcnow)
+
+    def to_mongo(self) -> dict[str, Any]:
+        """Convert to MongoDB document format."""
+        data = self.model_dump(by_alias=True, exclude_none=True)
+        if "_id" in data and data["_id"] is None:
+            del data["_id"]
+        if "element_type" in data:
+            data["element_type"] = self.element_type.value
+        return data
+
+    @classmethod
+    def from_mongo(cls, data: dict[str, Any]) -> "Paragraph":
+        """Create from MongoDB document."""
+        if "element_type" in data:
+            data["element_type"] = ElementType(data["element_type"])
+        return cls(**data)
+
+
+class TableCell(BaseModel):
+    """A cell in a table."""
+
+    text: str
+    row: int
+    col: int
+    row_span: int = 1
+    col_span: int = 1
+    is_header: bool = False
+
+
+class Table(BaseModel):
+    """Table extracted from a document."""
+
+    model_config = ConfigDict(populate_by_name=True, arbitrary_types_allowed=True)
+
+    id: PyObjectId | None = Field(default=None, alias="_id")
+    paper_id: PyObjectId
+    arxiv_id: str
+    table_index: int
+    caption: str | None = None
+    cells: list[TableCell] = Field(default_factory=list)
+    num_rows: int = 0
+    num_cols: int = 0
+    markdown: str | None = None  # Markdown representation
+    section_title: str | None = None
+    bbox: BoundingBoxModel | None = None
+    created_at: datetime = Field(default_factory=utcnow)
 
     def to_mongo(self) -> dict[str, Any]:
         """Convert to MongoDB document format."""
@@ -139,7 +240,35 @@ class Paragraph(BaseModel):
         return data
 
     @classmethod
-    def from_mongo(cls, data: dict[str, Any]) -> "Paragraph":
+    def from_mongo(cls, data: dict[str, Any]) -> "Table":
+        """Create from MongoDB document."""
+        return cls(**data)
+
+
+class Figure(BaseModel):
+    """Figure/image extracted from a document."""
+
+    model_config = ConfigDict(populate_by_name=True, arbitrary_types_allowed=True)
+
+    id: PyObjectId | None = Field(default=None, alias="_id")
+    paper_id: PyObjectId
+    arxiv_id: str
+    figure_index: int
+    caption: str | None = None
+    image_path: str | None = None
+    section_title: str | None = None
+    bbox: BoundingBoxModel | None = None
+    created_at: datetime = Field(default_factory=utcnow)
+
+    def to_mongo(self) -> dict[str, Any]:
+        """Convert to MongoDB document format."""
+        data = self.model_dump(by_alias=True, exclude_none=True)
+        if "_id" in data and data["_id"] is None:
+            del data["_id"]
+        return data
+
+    @classmethod
+    def from_mongo(cls, data: dict[str, Any]) -> "Figure":
         """Create from MongoDB document."""
         return cls(**data)
 
@@ -156,7 +285,7 @@ class SearchResult(BaseModel):
     domain: str | None = None
     total_results: int = 0
     paper_ids: list[str] = Field(default_factory=list)
-    executed_at: datetime = Field(default_factory=datetime.utcnow)
+    executed_at: datetime = Field(default_factory=utcnow)
 
     def to_mongo(self) -> dict[str, Any]:
         """Convert to MongoDB document format."""
@@ -189,8 +318,8 @@ class TermList(BaseModel):
     name: str
     description: str | None = None
     terms: list[Term] = Field(default_factory=list)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utcnow)
+    updated_at: datetime = Field(default_factory=utcnow)
 
     def to_mongo(self) -> dict[str, Any]:
         """Convert to MongoDB document format."""

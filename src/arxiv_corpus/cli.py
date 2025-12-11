@@ -252,31 +252,38 @@ def download_papers(ctx: click.Context, status: str, limit: int | None) -> None:
 
 @main.group()
 def process() -> None:
-    """Process papers (extract text, NLP analysis)."""
+    """Process papers (convert, extract text, NLP analysis)."""
     pass
 
 
-@process.command("extract")
+@process.command("convert")
 @click.option(
     "--status",
     type=click.Choice(["downloaded", "all"]),
     default="downloaded",
-    help="Which papers to process",
+    help="Which papers to convert",
+)
+@click.option(
+    "--output-format",
+    "-f",
+    type=click.Choice(["markdown", "json", "both"]),
+    default="both",
+    help="Output format from Docling",
 )
 @click.pass_context
-def process_extract(ctx: click.Context, status: str) -> None:
-    """Extract text from downloaded PDFs."""
+def process_convert(ctx: click.Context, status: str, output_format: str) -> None:
+    """Convert PDFs using Docling (AI-powered document understanding)."""
     settings: Settings = ctx.obj["settings"]
 
-    from arxiv_corpus.preprocessing import PdfExtractor, TextCleaner
+    from arxiv_corpus.preprocessing import DocumentConverter, TextCleaner
     from arxiv_corpus.storage import Database
-    from arxiv_corpus.storage.models import PaperStatus
+    from arxiv_corpus.storage.models import DocumentMetrics, PaperStatus
     from arxiv_corpus.utils.logging import ProgressLogger
 
     db = Database(settings.database)
     settings.paths.ensure_dirs()
 
-    extractor = PdfExtractor(settings.preprocessing.pdf_extraction)
+    converter = DocumentConverter(settings.preprocessing.pdf_extraction)
     cleaner = TextCleaner(settings.preprocessing.text_cleaning)
 
     with db.session():
@@ -286,10 +293,134 @@ def process_extract(ctx: click.Context, status: str) -> None:
             papers = [p for p in db.papers.find() if p.get("pdf_path")]
 
         if not papers:
+            console.print("[yellow]No papers to convert.[/yellow]")
+            return
+
+        console.print(f"[bold]Converting {len(papers)} papers with Docling[/bold]")
+
+        success = 0
+        failed = 0
+
+        with ProgressLogger("Converting documents", total=len(papers)) as progress:
+            for paper_doc in papers:
+                paper = (
+                    paper_doc if hasattr(paper_doc, "arxiv_id") else type("Paper", (), paper_doc)()
+                )
+
+                try:
+                    pdf_path = (
+                        paper.pdf_path if hasattr(paper, "pdf_path") else paper_doc.get("pdf_path")
+                    )
+                    arxiv_id = (
+                        paper.arxiv_id if hasattr(paper, "arxiv_id") else paper_doc.get("arxiv_id")
+                    )
+
+                    if not pdf_path:
+                        continue
+
+                    # Convert with Docling
+                    doc = converter.convert(pdf_path)
+
+                    # Clean using document structure
+                    cleaned = cleaner.clean_document(doc)
+
+                    # Save outputs
+                    updates: dict = {"status": PaperStatus.CONVERTED.value}
+
+                    # Save plain text
+                    text_path = Path(settings.paths.processed) / "text" / f"{arxiv_id}.txt"
+                    text_path.parent.mkdir(parents=True, exist_ok=True)
+                    text_path.write_text(cleaned.full_text, encoding="utf-8")
+                    updates["text_path"] = str(text_path)
+
+                    # Save markdown
+                    if output_format in ("markdown", "both"):
+                        md_path = Path(settings.paths.processed) / "markdown" / f"{arxiv_id}.md"
+                        md_path.parent.mkdir(parents=True, exist_ok=True)
+                        md_path.write_text(doc.markdown, encoding="utf-8")
+                        updates["markdown_path"] = str(md_path)
+
+                    # Save JSON
+                    if output_format in ("json", "both"):
+                        json_path = Path(settings.paths.processed) / "json" / f"{arxiv_id}.json"
+                        json_path.parent.mkdir(parents=True, exist_ok=True)
+                        converter.convert_to_json(pdf_path, json_path)
+                        updates["json_path"] = str(json_path)
+
+                    # Store document metrics
+                    updates["document_metrics"] = DocumentMetrics(
+                        num_pages=doc.num_pages,
+                        num_elements=len(doc.elements),
+                        num_paragraphs=len(doc.paragraphs),
+                        num_sections=len(doc.sections),
+                        num_tables=len(doc.tables),
+                        num_figures=len(doc.figures),
+                        word_count=sum(len(p.split()) for p in cleaned.paragraphs),
+                        char_count=sum(len(p) for p in cleaned.paragraphs),
+                    ).model_dump()
+
+                    # Store section titles
+                    updates["sections"] = [s.title for s in doc.sections]
+
+                    db.update_paper(arxiv_id, updates)
+                    success += 1
+
+                except Exception as e:
+                    arxiv_id = (
+                        paper.arxiv_id
+                        if hasattr(paper, "arxiv_id")
+                        else paper_doc.get("arxiv_id", "unknown")
+                    )
+                    logger.error(f"Failed to convert {arxiv_id}: {e}")
+                    db.update_paper(
+                        arxiv_id,
+                        {"status": PaperStatus.ERROR.value, "error_message": str(e)},
+                    )
+                    failed += 1
+
+                progress.update()
+
+        console.print(f"[green]Converted: {success}[/green]")
+        if failed:
+            console.print(f"[red]Failed: {failed}[/red]")
+
+
+@process.command("extract")
+@click.option(
+    "--status",
+    type=click.Choice(["converted", "downloaded", "all"]),
+    default="converted",
+    help="Which papers to process",
+)
+@click.pass_context
+def process_extract(ctx: click.Context, status: str) -> None:
+    """Extract and clean text from converted documents."""
+    settings: Settings = ctx.obj["settings"]
+
+    from arxiv_corpus.preprocessing import DocumentConverter, TextCleaner
+    from arxiv_corpus.storage import Database
+    from arxiv_corpus.storage.models import PaperStatus
+    from arxiv_corpus.utils.logging import ProgressLogger
+
+    db = Database(settings.database)
+    settings.paths.ensure_dirs()
+
+    converter = DocumentConverter(settings.preprocessing.pdf_extraction)
+    cleaner = TextCleaner(settings.preprocessing.text_cleaning)
+
+    with db.session():
+        if status == "converted":
+            papers = list(db.get_papers_by_status(PaperStatus.CONVERTED))
+        elif status == "downloaded":
+            papers = list(db.get_papers_by_status(PaperStatus.DOWNLOADED))
+        else:
+            papers = [p for p in db.papers.find() if p.get("pdf_path")]
+
+        if not papers:
             console.print("[yellow]No papers to process.[/yellow]")
             return
 
-        console.print(f"[bold]Processing {len(papers)} papers[/bold]")
+        console.print(f"[bold]Extracting text from {len(papers)} papers[/bold]")
 
         success = 0
         failed = 0
@@ -311,16 +442,16 @@ def process_extract(ctx: click.Context, status: str) -> None:
                     if not pdf_path:
                         continue
 
-                    # Extract text
-                    doc = extractor.extract(pdf_path)
+                    # Convert with Docling
+                    doc = converter.convert(pdf_path)
 
-                    # Clean text
-                    cleaned = cleaner.clean(doc.full_text)
+                    # Clean using document structure
+                    cleaned = cleaner.clean_document(doc)
 
                     # Save cleaned text
                     text_path = Path(settings.paths.processed) / "text" / f"{arxiv_id}.txt"
                     text_path.parent.mkdir(parents=True, exist_ok=True)
-                    text_path.write_text("\n\n".join(cleaned.paragraphs), encoding="utf-8")
+                    text_path.write_text(cleaned.full_text, encoding="utf-8")
 
                     db.update_paper(
                         arxiv_id,
@@ -334,7 +465,7 @@ def process_extract(ctx: click.Context, status: str) -> None:
                         if hasattr(paper, "arxiv_id")
                         else paper_doc.get("arxiv_id", "unknown")
                     )
-                    logger.error(f"Failed to process {arxiv_id}: {e}")
+                    logger.error(f"Failed to extract {arxiv_id}: {e}")
                     db.update_paper(
                         arxiv_id,
                         {"status": PaperStatus.ERROR.value, "error_message": str(e)},
@@ -343,7 +474,7 @@ def process_extract(ctx: click.Context, status: str) -> None:
 
                 progress.update()
 
-        console.print(f"[green]Processed: {success}[/green]")
+        console.print(f"[green]Extracted: {success}[/green]")
         if failed:
             console.print(f"[red]Failed: {failed}[/red]")
 
@@ -363,7 +494,9 @@ def process_analyze(ctx: click.Context) -> None:
     nlp = NlpProcessor(settings.nlp)
 
     with db.session():
+        # Accept both EXTRACTED and CONVERTED status
         papers = list(db.get_papers_by_status(PaperStatus.EXTRACTED))
+        papers.extend(db.get_papers_by_status(PaperStatus.CONVERTED))
 
         if not papers:
             console.print("[yellow]No papers to analyze.[/yellow]")
@@ -488,9 +621,9 @@ def status(ctx: click.Context) -> None:
             table.add_column("Status", style="cyan")
             table.add_column("Count", justify="right", style="green")
 
-            for status in PaperStatus:
-                count = db.count_papers(status)
-                table.add_row(status.value.capitalize(), str(count))
+            for paper_status in PaperStatus:
+                count = db.count_papers(paper_status)
+                table.add_row(paper_status.value.capitalize(), str(count))
 
             table.add_row("─" * 15, "─" * 10)
             table.add_row("Total", str(db.count_papers()))
@@ -536,7 +669,7 @@ search:
         console.print(f"[green]Created {config_path}[/green]")
 
     # Create data directories
-    for dir_name in ["data/raw", "data/processed/text", "data/output"]:
+    for dir_name in ["data/raw", "data/processed/text", "data/processed/markdown", "data/output"]:
         Path(dir_name).mkdir(parents=True, exist_ok=True)
 
     console.print("[green]Created data directories[/green]")

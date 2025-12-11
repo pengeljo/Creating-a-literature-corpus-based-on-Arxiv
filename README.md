@@ -5,7 +5,13 @@ A generic, reusable system for creating literature corpora from arXiv and analyz
 ## Features
 
 - **Configurable Search**: Build complex arXiv queries from term combinations
-- **Automated Pipeline**: Query → Download → Extract → Analyze → Export
+- **Automated Pipeline**: Query → Download → Convert → Extract → Analyze → Export
+- **AI-Powered Document Conversion**: [Docling](https://github.com/DS4SD/docling)-powered PDF processing with:
+  - Layout analysis (DocLayNet model)
+  - Table structure recognition (TableFormer)
+  - Figure extraction with captions
+  - Reading order detection
+  - Multiple output formats (Markdown, JSON, text)
 - **NLP Analysis**: spaCy-powered tokenization, lemmatization, and n-gram extraction
 - **Term Expansion**: Wildcard and lemma-based term expansion for comprehensive searches
 - **Paragraph Search**: Find and rank paragraphs containing specific terms
@@ -82,7 +88,10 @@ A generic, reusable system for creating literature corpora from arXiv and analyz
    # Download PDFs
    arxiv-corpus download papers -c config/project.yaml
 
-   # Extract and process text
+   # Convert PDFs to structured format (using Docling)
+   arxiv-corpus process convert -c config/project.yaml --output-format both
+
+   # Extract text and run NLP analysis
    arxiv-corpus process extract -c config/project.yaml
    arxiv-corpus process analyze -c config/project.yaml
 
@@ -105,11 +114,34 @@ A generic, reusable system for creating literature corpora from arXiv and analyz
 | `arxiv-corpus query run` | Execute search queries |
 | `arxiv-corpus query list` | List executed queries |
 | `arxiv-corpus download papers` | Download PDFs |
-| `arxiv-corpus process extract` | Extract text from PDFs |
+| `arxiv-corpus process convert` | Convert PDFs using Docling (markdown/json/both) |
+| `arxiv-corpus process extract` | Extract text from converted documents |
 | `arxiv-corpus process analyze` | Run NLP analysis |
 | `arxiv-corpus export papers` | Export papers to file |
 
 Use `--help` with any command for more options.
+
+### Document Conversion
+
+The `process convert` command uses [Docling](https://github.com/DS4SD/docling) for AI-powered document understanding:
+
+```bash
+# Convert to markdown (default)
+arxiv-corpus process convert -c config/project.yaml
+
+# Convert to JSON (preserves full structure)
+arxiv-corpus process convert -c config/project.yaml --output-format json
+
+# Convert to both formats
+arxiv-corpus process convert -c config/project.yaml --output-format both
+```
+
+Docling extracts:
+- Document structure (sections, paragraphs, lists)
+- Tables with cell-level precision
+- Figures with captions
+- Mathematical formulas
+- Code blocks
 
 ## Configuration
 
@@ -130,15 +162,18 @@ Key configuration sections:
 arxiv-corpus/
 ├── src/arxiv_corpus/      # Main package
 │   ├── acquisition/       # arXiv API client
-│   ├── preprocessing/     # PDF extraction, NLP
+│   ├── preprocessing/     # Document conversion (Docling), text cleaning, NLP
 │   ├── analysis/          # Term expansion, search
 │   ├── export/            # Output generation
-│   ├── storage/           # MongoDB operations
+│   ├── storage/           # MongoDB operations, data models
 │   └── cli.py             # Command-line interface
 ├── config/                # Configuration files
 ├── tests/                 # Test suite
 ├── docker/                # Docker files
 ├── data/                  # Data directories (gitignored)
+│   ├── pdfs/              # Downloaded PDFs
+│   ├── text/              # Extracted text files
+│   └── markdown/          # Docling markdown output
 └── archive/               # Original research code
 ```
 

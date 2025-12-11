@@ -1,10 +1,18 @@
-"""Text cleaning and normalization."""
+"""Text cleaning and normalization for document processing."""
+
+from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from arxiv_corpus.config import TextCleaningConfig
 from arxiv_corpus.utils.logging import get_logger
+
+if TYPE_CHECKING:
+    from arxiv_corpus.preprocessing.document_converter import (
+        ExtractedDocument,
+    )
 
 logger = get_logger(__name__)
 
@@ -19,8 +27,26 @@ class CleanedText:
     removed_sections: list[str]
 
 
+@dataclass
+class CleanedDocument:
+    """Result of cleaning a Docling-extracted document."""
+
+    original_element_count: int
+    cleaned_element_count: int
+    paragraphs: list[str]
+    sections: dict[str, list[str]]  # section_title -> paragraphs
+    removed_sections: list[str]
+    tables_markdown: list[str] = field(default_factory=list)
+    metadata: dict[str, int] = field(default_factory=dict)
+
+    @property
+    def full_text(self) -> str:
+        """Get all paragraphs as single text."""
+        return "\n\n".join(self.paragraphs)
+
+
 class TextCleaner:
-    """Clean and normalize extracted text."""
+    """Clean and normalize extracted text and documents."""
 
     # Common patterns
     PAGE_NUMBER_PATTERN = re.compile(r"^\s*\d+\s*$", re.MULTILINE)
@@ -35,6 +61,15 @@ class TextCleaner:
         r"^\s*bibliography\s*$",
         r"^\s*works?\s+cited\s*$",
         r"^\s*literature\s+cited\s*$",
+    ]
+
+    # Sections to exclude from corpus (common in academic papers)
+    EXCLUDED_SECTION_PATTERNS = [
+        r"references?",
+        r"bibliography",
+        r"acknowledgm?ents?",
+        r"appendix",
+        r"supplementary",
     ]
 
     # Header/footer patterns (common in academic papers)
@@ -58,6 +93,12 @@ class TextCleaner:
             re.IGNORECASE | re.MULTILINE,
         )
 
+        # Compile excluded section pattern
+        self.excluded_section_pattern = re.compile(
+            "|".join(self.EXCLUDED_SECTION_PATTERNS),
+            re.IGNORECASE,
+        )
+
         # Compile header/footer patterns
         self.header_footer_pattern = re.compile(
             "|".join(self.HEADER_FOOTER_PATTERNS),
@@ -65,7 +106,7 @@ class TextCleaner:
         )
 
     def clean(self, text: str) -> CleanedText:
-        """Clean and normalize text.
+        """Clean and normalize raw text.
 
         Args:
             text: Raw text to clean.
@@ -111,6 +152,126 @@ class TextCleaner:
             paragraphs=paragraphs,
             removed_sections=removed_sections,
         )
+
+    def clean_document(self, doc: ExtractedDocument) -> CleanedDocument:
+        """Clean a Docling-extracted document using its structure.
+
+        This method leverages Docling's document structure to intelligently
+        filter and clean content, rather than relying on pattern matching.
+
+        Args:
+            doc: ExtractedDocument from DocumentConverter.
+
+        Returns:
+            CleanedDocument with cleaned paragraphs organized by section.
+        """
+        from arxiv_corpus.preprocessing.document_converter import DocumentElementType
+
+        paragraphs: list[str] = []
+        sections: dict[str, list[str]] = {}
+        removed_sections: list[str] = []
+        tables_markdown: list[str] = []
+
+        current_section = "Introduction"  # Default section
+        in_excluded_section = False
+
+        for elem in doc.elements:
+            # Check for section headers
+            if elem.element_type in (
+                DocumentElementType.TITLE,
+                DocumentElementType.SECTION_HEADER,
+            ):
+                current_section = elem.text.strip()
+
+                # Check if this section should be excluded
+                if self.config.remove_references_section and self.excluded_section_pattern.search(
+                    current_section
+                ):
+                    in_excluded_section = True
+                    removed_sections.append(current_section.lower())
+                else:
+                    in_excluded_section = False
+
+                if current_section not in sections:
+                    sections[current_section] = []
+
+                continue
+
+            # Skip content in excluded sections
+            if in_excluded_section:
+                continue
+
+            # Skip page headers/footers (Docling provides this type info)
+            if (
+                elem.element_type
+                in (
+                    DocumentElementType.PAGE_HEADER,
+                    DocumentElementType.PAGE_FOOTER,
+                    DocumentElementType.FOOTNOTE,
+                )
+                and self.config.remove_headers_footers
+            ):
+                continue
+
+            # Process paragraph text
+            if elem.element_type == DocumentElementType.PARAGRAPH:
+                cleaned_text = self._clean_text(elem.text)
+                if len(cleaned_text) >= self.config.min_paragraph_length:
+                    paragraphs.append(cleaned_text)
+                    if current_section in sections:
+                        sections[current_section].append(cleaned_text)
+
+            # Process list items
+            elif elem.element_type == DocumentElementType.LIST_ITEM:
+                cleaned_text = self._clean_text(elem.text)
+                if len(cleaned_text) >= self.config.min_paragraph_length // 2:  # Lower threshold
+                    paragraphs.append(cleaned_text)
+                    if current_section in sections:
+                        sections[current_section].append(cleaned_text)
+
+        # Extract tables as markdown
+        for table in doc.tables:
+            tables_markdown.append(table.to_markdown())
+
+        return CleanedDocument(
+            original_element_count=len(doc.elements),
+            cleaned_element_count=len(paragraphs),
+            paragraphs=paragraphs,
+            sections=sections,
+            removed_sections=removed_sections,
+            tables_markdown=tables_markdown,
+            metadata={
+                "total_elements": len(doc.elements),
+                "total_paragraphs": len(paragraphs),
+                "total_sections": len(sections),
+                "total_tables": len(doc.tables),
+                "total_figures": len(doc.figures),
+            },
+        )
+
+    def _clean_text(self, text: str) -> str:
+        """Clean a single text string.
+
+        Args:
+            text: Text to clean.
+
+        Returns:
+            Cleaned text.
+        """
+        # Remove URLs if configured
+        if self.config.remove_urls:
+            text = self.URL_PATTERN.sub("", text)
+
+        # Remove emails if configured
+        if self.config.remove_emails:
+            text = self.EMAIL_PATTERN.sub("", text)
+
+        # Normalize whitespace
+        if self.config.normalize_whitespace:
+            text = self.MULTIPLE_SPACES.sub(" ", text)
+            text = text.strip()
+
+        return text
 
     def _remove_references_section(self, text: str) -> tuple[str, str | None]:
         """Remove the references section from text.
