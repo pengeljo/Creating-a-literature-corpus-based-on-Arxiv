@@ -241,7 +241,33 @@ Key configuration sections:
 - `analysis`: N-gram and term expansion settings
 - `rag`: RAG/embedding settings (chunking, embedding model, vector store)
 - `database`: MongoDB connection
+- `paths`: Data directory locations
 - `output`: Export format options
+
+### Data Directories
+
+By default, data is stored in subdirectories under `data/`:
+
+| Directory | Purpose | Config Key | Environment Variable |
+|-----------|---------|------------|---------------------|
+| `data/raw/` | Downloaded PDFs | `paths.raw` | `ARXIV_CORPUS_RAW_PATH` |
+| `data/processed/` | Converted documents (markdown, JSON, text) | `paths.processed` | `ARXIV_CORPUS_PROCESSED_PATH` |
+| `data/output/` | Exported files (Excel, CSV, JSON) | `paths.output` | `ARXIV_CORPUS_OUTPUT_PATH` |
+
+To store data in a different location (e.g., external drive), set the environment variables:
+```bash
+export ARXIV_CORPUS_RAW_PATH=/mnt/storage/arxiv/pdfs
+export ARXIV_CORPUS_PROCESSED_PATH=/mnt/storage/arxiv/processed
+export ARXIV_CORPUS_OUTPUT_PATH=/mnt/storage/arxiv/output
+```
+
+Or configure in your project YAML:
+```yaml
+paths:
+  raw: /mnt/storage/arxiv/pdfs
+  processed: /mnt/storage/arxiv/processed
+  output: /mnt/storage/arxiv/output
+```
 
 ## Project Structure
 
@@ -259,9 +285,9 @@ arxiv-corpus/
 ├── tests/                 # Test suite
 ├── docker/                # Docker files
 ├── data/                  # Data directories (gitignored)
-│   ├── pdfs/              # Downloaded PDFs
-│   ├── text/              # Extracted text files
-│   └── markdown/          # Docling markdown output
+│   ├── raw/               # Downloaded PDFs
+│   ├── processed/         # Converted documents (markdown, JSON, text)
+│   └── output/            # Exported files
 └── archive/               # Original research code
 ```
 

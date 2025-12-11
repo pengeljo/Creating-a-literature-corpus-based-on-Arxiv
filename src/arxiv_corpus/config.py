@@ -187,11 +187,29 @@ class LoggingConfig(BaseModel):
 
 
 class PathsConfig(BaseModel):
-    """Data paths configuration."""
+    """Data paths configuration.
+
+    Paths can be configured via:
+    1. YAML config file (paths.raw, paths.processed, paths.output)
+    2. Environment variables (ARXIV_CORPUS_RAW_PATH, etc.)
+
+    Environment variables take precedence over config file values.
+    """
 
     raw: str = "data/raw"
     processed: str = "data/processed"
     output: str = "data/output"
+
+    def model_post_init(self, __context: Any) -> None:
+        """Apply environment variable overrides after initialization."""
+        import os
+
+        if env_raw := os.environ.get("ARXIV_CORPUS_RAW_PATH"):
+            object.__setattr__(self, "raw", env_raw)
+        if env_processed := os.environ.get("ARXIV_CORPUS_PROCESSED_PATH"):
+            object.__setattr__(self, "processed", env_processed)
+        if env_output := os.environ.get("ARXIV_CORPUS_OUTPUT_PATH"):
+            object.__setattr__(self, "output", env_output)
 
     def ensure_dirs(self) -> None:
         """Create directories if they don't exist."""
