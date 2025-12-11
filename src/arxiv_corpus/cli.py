@@ -388,8 +388,8 @@ def process_convert(ctx: click.Context, status: str, output_format: str) -> None
 @process.command("extract")
 @click.option(
     "--status",
-    type=click.Choice(["converted", "downloaded", "all"]),
-    default="converted",
+    type=click.Choice(["converted", "embedded", "downloaded", "all"]),
+    default="all",
     help="Which papers to process",
 )
 @click.pass_context
@@ -411,10 +411,14 @@ def process_extract(ctx: click.Context, status: str) -> None:
     with db.session():
         if status == "converted":
             papers = list(db.get_papers_by_status(PaperStatus.CONVERTED))
+        elif status == "embedded":
+            papers = list(db.get_papers_by_status(PaperStatus.EMBEDDED))
         elif status == "downloaded":
             papers = list(db.get_papers_by_status(PaperStatus.DOWNLOADED))
         else:
-            papers = [p for p in db.papers.find() if p.get("pdf_path")]
+            # Default: process both converted and embedded papers
+            papers = list(db.get_papers_by_status(PaperStatus.CONVERTED))
+            papers.extend(db.get_papers_by_status(PaperStatus.EMBEDDED))
 
         if not papers:
             console.print("[yellow]No papers to process.[/yellow]")
