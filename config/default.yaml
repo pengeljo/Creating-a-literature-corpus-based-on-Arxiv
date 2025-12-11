@@ -1,0 +1,167 @@
+# Default configuration for arxiv-corpus
+# Copy this file and customize for your project
+
+project:
+  name: "my-corpus"
+  description: "Literature corpus from arXiv"
+
+# arXiv search configuration
+search:
+  # Base terms that must appear in all queries
+  base_terms:
+    - "machine learning"
+
+  # Attribute terms - combined with base terms
+  attributes:
+    - "neural network"
+    - "deep learning"
+
+  # Domain/context terms - combined with base + attributes
+  domains:
+    - "natural language processing"
+    - "computer vision"
+
+  # Maximum results per query (arXiv limit is 30000)
+  max_results_per_query: 1000
+
+  # Categories to search in (empty = all)
+  # See: https://arxiv.org/category_taxonomy
+  categories: []
+  #  - "cs.AI"
+  #  - "cs.CL"
+  #  - "cs.LG"
+
+  # Date range (optional)
+  # date_from: "2020-01-01"
+  # date_to: "2024-12-31"
+
+# PDF download settings
+download:
+  # Number of concurrent downloads
+  concurrency: 3
+
+  # Delay between downloads (seconds) to respect rate limits
+  delay: 1.0
+
+  # Retry settings
+  max_retries: 3
+  retry_delay: 5.0
+
+  # Timeout for downloads (seconds)
+  timeout: 60
+
+# Text preprocessing settings
+preprocessing:
+  pdf_extraction:
+    # Method: "pdfplumber" (recommended) or "pymupdf"
+    method: "pdfplumber"
+
+    # Skip pages (e.g., skip first page with title, last with references)
+    skip_first_pages: 0
+    skip_last_pages: 0
+
+  text_cleaning:
+    # Minimum paragraph length (characters)
+    min_paragraph_length: 100
+
+    # Remove common artifacts
+    remove_headers_footers: true
+    remove_page_numbers: true
+    remove_urls: false
+    remove_emails: false
+
+    # Reference section handling
+    remove_references_section: true
+
+    # Normalize whitespace
+    normalize_whitespace: true
+
+# NLP processing settings (spaCy)
+nlp:
+  # spaCy model to use
+  # Options: en_core_web_sm, en_core_web_md, en_core_web_lg, en_core_web_trf
+  model: "en_core_web_sm"
+
+  # Processing options
+  disable_components: []  # Components to disable for speed: ["ner", "parser"]
+
+  # Batch size for processing
+  batch_size: 100
+
+# N-gram and analysis settings
+analysis:
+  ngrams:
+    # Maximum n-gram size
+    max_n: 4
+
+    # Minimum frequency to include in output
+    min_frequency: 2
+
+    # Include punctuation in n-grams
+    include_punctuation: false
+
+  term_expansion:
+    # Enable wildcard expansion (e.g., "autonom*" -> "autonomous", "autonomy")
+    wildcards: true
+
+    # Enable lemma-based expansion
+    lemma_expansion: true
+
+  paragraph_search:
+    # Ranking levels (0 = expand only, 1-3 = retrieval)
+    ranking_levels: [1, 2, 3]
+
+    # Context window (sentences before/after match)
+    context_sentences: 0
+
+# Database settings (MongoDB)
+database:
+  # Connection string (can use environment variable)
+  uri: "${MONGODB_URI:mongodb://localhost:27017}"
+
+  # Database name
+  name: "arxiv_corpus"
+
+  # Collections
+  collections:
+    papers: "papers"
+    paragraphs: "paragraphs"
+    search_results: "search_results"
+
+# Output settings
+output:
+  # Output formats to generate
+  formats:
+    - "excel"
+    - "csv"
+    - "json"
+
+  # Include metadata in output
+  include_metadata: true
+
+  # Excel settings
+  excel:
+    # Maximum rows per sheet
+    max_rows_per_sheet: 100000
+
+# Logging settings
+logging:
+  # Log level: DEBUG, INFO, WARNING, ERROR
+  level: "INFO"
+
+  # Log file (optional, empty = console only)
+  file: ""
+
+  # Log format
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+# Data directories
+paths:
+  # Raw downloaded files
+  raw: "data/raw"
+
+  # Processed files
+  processed: "data/processed"
+
+  # Output files
+  output: "data/output"

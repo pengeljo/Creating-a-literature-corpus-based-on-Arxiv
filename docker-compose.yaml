@@ -1,0 +1,62 @@
+# Docker Compose for arxiv-corpus development environment
+
+services:
+  # MongoDB database
+  mongodb:
+    image: mongo:7.0
+    container_name: arxiv-corpus-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_DATABASE: arxiv_corpus
+    volumes:
+      - mongodb_data:/data/db
+      - ./docker/mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Mongo Express - Web-based MongoDB admin interface (development only)
+  mongo-express:
+    image: mongo-express:1.0
+    container_name: arxiv-corpus-mongo-express
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    environment:
+      ME_CONFIG_MONGODB_URL: mongodb://mongodb:27017/
+      ME_CONFIG_BASICAUTH: "false"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    profiles:
+      - dev
+
+  # Main application (for production-like runs)
+  app:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: arxiv-corpus-app
+    environment:
+      MONGODB_URI: mongodb://mongodb:27017
+      ARXIV_CORPUS_CONFIG: /app/config/default.yaml
+    volumes:
+      - ./data:/app/data
+      - ./config:/app/config:ro
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    profiles:
+      - app
+
+volumes:
+  mongodb_data:
+    driver: local
+
+networks:
+  default:
+    name: arxiv-corpus-network
