@@ -1,6 +1,6 @@
 # arxiv-corpus
 
-A generic, reusable system for creating literature corpora from arXiv and analyzing them with NLP.
+A generic, reusable system for creating literature corpora from arXiv with AI-powered document processing, semantic search, and NLP analysis.
 
 ## Features
 
