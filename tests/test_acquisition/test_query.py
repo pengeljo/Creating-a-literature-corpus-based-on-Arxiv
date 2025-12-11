@@ -89,6 +89,58 @@ class TestQueryBuilder:
 
         assert len(queries) == 0
 
+    def test_build_queries_with_date_from(self) -> None:
+        """Test that date_from filter is included in query."""
+        config = SearchConfig(
+            base_terms=["agent"],
+            date_from="2024-01-01",
+        )
+        builder = QueryBuilder(config)
+        queries = builder.build_queries()
+
+        assert len(queries) == 1
+        assert "submittedDate:[202401010000 TO *]" in queries[0].query_string
+
+    def test_build_queries_with_date_to(self) -> None:
+        """Test that date_to filter is included in query."""
+        config = SearchConfig(
+            base_terms=["agent"],
+            date_to="2024-06-30",
+        )
+        builder = QueryBuilder(config)
+        queries = builder.build_queries()
+
+        assert len(queries) == 1
+        assert "submittedDate:[* TO 202406302359]" in queries[0].query_string
+
+    def test_build_queries_with_date_range(self) -> None:
+        """Test that both date filters are included in query."""
+        config = SearchConfig(
+            base_terms=["agent"],
+            date_from="2024-01-01",
+            date_to="2024-06-30",
+        )
+        builder = QueryBuilder(config)
+        queries = builder.build_queries()
+
+        assert len(queries) == 1
+        assert "submittedDate:[202401010000 TO 202406302359]" in queries[0].query_string
+
+    def test_build_queries_with_categories_and_dates(self) -> None:
+        """Test combining categories and date filters."""
+        config = SearchConfig(
+            base_terms=["neural network"],
+            categories=["cs.AI"],
+            date_from="2024-01-01",
+        )
+        builder = QueryBuilder(config)
+        queries = builder.build_queries()
+
+        assert len(queries) == 1
+        query = queries[0].query_string
+        assert "cat:cs.AI" in query
+        assert "submittedDate:[202401010000 TO *]" in query
+
 
 class TestQuery:
     """Tests for Query dataclass."""

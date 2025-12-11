@@ -16,13 +16,21 @@ class ProjectConfig(BaseModel):
 
 
 class SearchConfig(BaseModel):
-    """arXiv search configuration."""
+    """arXiv search configuration.
+
+    Date filtering uses YYYY-MM-DD format to filter by submission date.
+
+    Examples:
+        date_from: "2024-01-01"     # Papers from Jan 1, 2024 onwards
+        date_to: "2024-06-30"       # Papers up to June 30, 2024
+    """
 
     base_terms: list[str] = Field(default_factory=list)
     attributes: list[str] = Field(default_factory=list)
     domains: list[str] = Field(default_factory=list)
     max_results_per_query: int = Field(default=1000, ge=1, le=30000)
     categories: list[str] = Field(default_factory=list)
+    # Date filtering (YYYY-MM-DD format)
     date_from: str | None = None
     date_to: str | None = None
 

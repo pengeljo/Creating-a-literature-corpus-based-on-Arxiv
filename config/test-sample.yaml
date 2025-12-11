@@ -1,0 +1,44 @@
+# Test configuration - small sample for testing the pipeline
+# This will generate only 2 queries and limit to 5 results each
+
+project:
+  name: "test-sample"
+  description: "Small test sample for pipeline validation"
+
+search:
+  base_terms:
+    - "LLM agent"
+  attributes:
+    - "memory"
+  domains:
+    - "autonomous"
+    - "reasoning"
+  max_results_per_query: 5
+  categories:
+    - "cs.AI"
+    - "cs.CL"
+  # Only papers from 2024 onwards
+  date_from: "2024-01-01"
+
+download:
+  concurrency: 2
+  delay: 1.0
+
+rag:
+  chunking:
+    max_tokens: 256
+  embedding:
+    provider: sentence-transformers
+    model: sentence-transformers/all-MiniLM-L6-v2
+    batch_size: 16
+  vector_store:
+    collection_name: test_sample
+  top_k: 5
+
+database:
+  name: arxiv_corpus_test
+
+paths:
+  raw: data/raw
+  processed: data/processed
+  output: data/output

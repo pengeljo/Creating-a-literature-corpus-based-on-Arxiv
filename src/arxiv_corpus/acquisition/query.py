@@ -105,7 +105,41 @@ class QueryBuilder:
             cat_filter = " OR ".join(f"cat:{cat}" for cat in self.config.categories)
             query = f"({query}) AND ({cat_filter})"
 
+        # Add date filter if specified
+        date_filter = self._build_date_filter()
+        if date_filter:
+            query = f"({query}) AND {date_filter}"
+
         return query
+
+    def _build_date_filter(self) -> str | None:
+        """Build the date filter for arXiv API.
+
+        arXiv uses submittedDate field with format YYYYMMDDHHMMSS.
+        The range syntax is: submittedDate:[from TO to]
+
+        Returns:
+            Date filter string or None if no date filtering configured.
+        """
+        date_from = self.config.date_from
+        date_to = self.config.date_to
+
+        if not date_from and not date_to:
+            return None
+
+        # Convert YYYY-MM-DD to YYYYMMDD0000 format for arXiv
+        from_str = "*"
+        to_str = "*"
+
+        if date_from:
+            # Remove dashes and add time component (start of day)
+            from_str = date_from.replace("-", "") + "0000"
+
+        if date_to:
+            # Remove dashes and add time component (end of day)
+            to_str = date_to.replace("-", "") + "2359"
+
+        return f"submittedDate:[{from_str} TO {to_str}]"
 
     def build_custom_query(
         self,

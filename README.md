@@ -107,10 +107,20 @@ A generic, reusable system for creating literature corpora from arXiv and analyz
        - "simulation"
        - "AGI"
      max_results_per_query: 1000
+     # Optional: filter by submission date (YYYY-MM-DD)
+     date_from: "2023-01-01"
+     # date_to: "2024-12-31"
    ```
 
    This generates 50 query combinations (1 base × 10 attributes × 5 domains),
    searching for papers like "agent + goal + reinforcement learning".
+
+   **Incremental Updates**: To update an existing corpus with new papers, set `date_from`
+   to the date of your last update:
+   ```yaml
+   search:
+     date_from: "2024-11-01"  # Only papers from November 2024 onwards
+   ```
 
 2. **Run the pipeline**:
    ```bash
