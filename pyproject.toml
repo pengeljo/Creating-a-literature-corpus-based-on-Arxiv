@@ -54,9 +54,18 @@ dependencies = [
     # Utilities
     "python-dotenv>=1.0.0",
     "tqdm>=4.66.0",
+
+    # RAG / Embeddings
+    "qdrant-client>=1.9.0",
+    "sentence-transformers>=3.0.0",
 ]
 
 [project.optional-dependencies]
+# Optional: OpenAI embeddings (alternative to sentence-transformers)
+openai = [
+    "openai>=1.0.0",
+]
+
 dev = [
     # Testing
     "pytest>=8.0.0",
@@ -137,6 +146,8 @@ module = [
     "docling.*",
     "docling_core.*",
     "spacy.*",
+    "sentence_transformers.*",
+    "qdrant_client.*",
 ]
 ignore_missing_imports = true
 

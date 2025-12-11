@@ -5,7 +5,7 @@ A generic, reusable system for creating literature corpora from arXiv and analyz
 ## Features
 
 - **Configurable Search**: Build complex arXiv queries from term combinations
-- **Automated Pipeline**: Query → Download → Convert → Extract → Analyze → Export
+- **Automated Pipeline**: Query → Download → Convert → Embed → Extract → Analyze → Export
 - **AI-Powered Document Conversion**: [Docling](https://github.com/DS4SD/docling)-powered PDF processing with:
   - Layout analysis (DocLayNet model)
   - Table structure recognition (TableFormer)
@@ -15,9 +15,13 @@ A generic, reusable system for creating literature corpora from arXiv and analyz
 - **NLP Analysis**: spaCy-powered tokenization, lemmatization, and n-gram extraction
 - **Term Expansion**: Wildcard and lemma-based term expansion for comprehensive searches
 - **Paragraph Search**: Find and rank paragraphs containing specific terms
+- **RAG/Semantic Search**: Vector-based search over your corpus using:
+  - Docling's HybridChunker for semantic document chunking
+  - sentence-transformers (local) or OpenAI embeddings
+  - Qdrant vector database for similarity search
 - **Multiple Export Formats**: Excel, CSV, JSON output
 - **MongoDB Storage**: Persistent storage for papers and analysis results
-- **Docker Support**: Containerized deployment with docker-compose
+- **Docker Support**: Containerized deployment with docker-compose (MongoDB + Qdrant)
 
 ## Installation
 
@@ -52,9 +56,9 @@ A generic, reusable system for creating literature corpora from arXiv and analyz
    python -m spacy download en_core_web_sm
    ```
 
-5. **Start MongoDB** (using Docker)
+5. **Start MongoDB and Qdrant** (using Docker)
    ```bash
-   docker-compose up -d mongodb
+   docker-compose up -d mongodb qdrant
    ```
 
 6. **Initialize project**
@@ -91,6 +95,12 @@ A generic, reusable system for creating literature corpora from arXiv and analyz
    # Convert PDFs to structured format (using Docling)
    arxiv-corpus process convert -c config/project.yaml --output-format both
 
+   # Generate embeddings for semantic search
+   arxiv-corpus embed generate -c config/project.yaml
+
+   # Search your corpus
+   arxiv-corpus search "attention mechanisms in transformers" -c config/project.yaml
+
    # Extract text and run NLP analysis
    arxiv-corpus process extract -c config/project.yaml
    arxiv-corpus process analyze -c config/project.yaml
@@ -117,6 +127,9 @@ A generic, reusable system for creating literature corpora from arXiv and analyz
 | `arxiv-corpus process convert` | Convert PDFs using Docling (markdown/json/both) |
 | `arxiv-corpus process extract` | Extract text from converted documents |
 | `arxiv-corpus process analyze` | Run NLP analysis |
+| `arxiv-corpus embed generate` | Generate embeddings for semantic search |
+| `arxiv-corpus embed stats` | Show vector store statistics |
+| `arxiv-corpus search "query"` | Semantic search over the corpus |
 | `arxiv-corpus export papers` | Export papers to file |
 
 Use `--help` with any command for more options.
@@ -143,6 +156,51 @@ Docling extracts:
 - Mathematical formulas
 - Code blocks
 
+### Semantic Search (RAG)
+
+The project includes built-in RAG (Retrieval-Augmented Generation) support for semantic search:
+
+```bash
+# Generate embeddings for converted papers
+arxiv-corpus embed generate -c config/project.yaml
+
+# Search your corpus
+arxiv-corpus search "transformer attention mechanisms" -c config/project.yaml
+
+# Search with options
+arxiv-corpus search "neural networks" --top-k 20 --threshold 0.7
+
+# Filter to specific paper
+arxiv-corpus search "methodology" --paper 2301.00001
+
+# View embedding statistics
+arxiv-corpus embed stats -c config/project.yaml
+```
+
+Configure RAG settings in your config:
+```yaml
+rag:
+  chunking:
+    max_tokens: 512      # Max tokens per chunk
+    merge_peers: true    # Merge small adjacent chunks
+  embedding:
+    provider: sentence-transformers  # or: openai
+    model: sentence-transformers/all-MiniLM-L6-v2
+    batch_size: 32
+  vector_store:
+    url: http://localhost:6333  # Qdrant URL
+    collection_name: arxiv_papers
+    distance: cosine
+  top_k: 10
+  score_threshold: 0.0
+```
+
+For OpenAI embeddings, install the optional dependency and set your API key:
+```bash
+pip install -e ".[openai]"
+export OPENAI_API_KEY=your-key-here
+```
+
 ## Configuration
 
 See [config/default.yaml](config/default.yaml) for all available options.
@@ -153,6 +211,7 @@ Key configuration sections:
 - `preprocessing`: Text extraction and cleaning
 - `nlp`: spaCy model and processing options
 - `analysis`: N-gram and term expansion settings
+- `rag`: RAG/embedding settings (chunking, embedding model, vector store)
 - `database`: MongoDB connection
 - `output`: Export format options
 
@@ -163,6 +222,7 @@ arxiv-corpus/
 ├── src/arxiv_corpus/      # Main package
 │   ├── acquisition/       # arXiv API client
 │   ├── preprocessing/     # Document conversion (Docling), text cleaning, NLP
+│   ├── embeddings/        # RAG support (chunking, embeddings, vector store)
 │   ├── analysis/          # Term expansion, search
 │   ├── export/            # Output generation
 │   ├── storage/           # MongoDB operations, data models
@@ -197,10 +257,14 @@ mypy src
 ## Docker Usage
 
 ```bash
-# Start all services (MongoDB + Mongo Express)
+# Start core services (MongoDB + Qdrant)
+docker-compose up -d mongodb qdrant
+
+# Start all services including Mongo Express for debugging
 docker-compose --profile dev up -d
 
 # Access Mongo Express at http://localhost:8081
+# Access Qdrant dashboard at http://localhost:6333/dashboard
 
 # Build and run the application
 docker-compose --profile app up --build

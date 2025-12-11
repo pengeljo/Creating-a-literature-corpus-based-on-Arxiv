@@ -94,6 +94,44 @@ class ParagraphSearchConfig(BaseModel):
     context_sentences: int = Field(default=0, ge=0)
 
 
+class ChunkingConfig(BaseModel):
+    """Chunking configuration for embeddings."""
+
+    max_tokens: int = Field(default=512, ge=64, le=8192)
+    merge_peers: bool = True  # Merge undersized consecutive chunks with same headings
+
+
+class EmbeddingConfig(BaseModel):
+    """Embedding model configuration."""
+
+    provider: str = Field(default="sentence-transformers", pattern="^(sentence-transformers|openai)$")
+    model: str = "sentence-transformers/all-MiniLM-L6-v2"
+    # OpenAI-specific settings
+    openai_api_key: str | None = None
+    # Batch processing
+    batch_size: int = Field(default=32, ge=1, le=512)
+
+
+class VectorStoreConfig(BaseModel):
+    """Vector store (Qdrant) configuration."""
+
+    url: str = "http://localhost:6333"
+    collection_name: str = "arxiv_papers"
+    # Similarity metric: cosine, euclid, or dot
+    distance: str = Field(default="cosine", pattern="^(cosine|euclid|dot)$")
+
+
+class RagConfig(BaseModel):
+    """RAG (Retrieval-Augmented Generation) configuration."""
+
+    chunking: ChunkingConfig = Field(default_factory=ChunkingConfig)
+    embedding: EmbeddingConfig = Field(default_factory=EmbeddingConfig)
+    vector_store: VectorStoreConfig = Field(default_factory=VectorStoreConfig)
+    # Retrieval settings
+    top_k: int = Field(default=10, ge=1, le=100)
+    score_threshold: float = Field(default=0.0, ge=0.0, le=1.0)
+
+
 class AnalysisConfig(BaseModel):
     """Analysis configuration."""
 
@@ -177,6 +215,7 @@ class Settings(BaseSettings):
     preprocessing: PreprocessingConfig = Field(default_factory=PreprocessingConfig)
     nlp: NlpConfig = Field(default_factory=NlpConfig)
     analysis: AnalysisConfig = Field(default_factory=AnalysisConfig)
+    rag: RagConfig = Field(default_factory=RagConfig)
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     output: OutputConfig = Field(default_factory=OutputConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)

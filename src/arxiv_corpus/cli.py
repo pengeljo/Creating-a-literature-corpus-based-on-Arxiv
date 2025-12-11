@@ -639,6 +639,224 @@ def status(ctx: click.Context) -> None:
         console.print("[yellow]Make sure MongoDB is running.[/yellow]")
 
 
+@main.group()
+def embed() -> None:
+    """Embed documents for RAG/semantic search."""
+    pass
+
+
+@embed.command("generate")
+@click.option(
+    "--status",
+    type=click.Choice(["converted", "all"]),
+    default="converted",
+    help="Which papers to embed",
+)
+@click.option(
+    "--recreate",
+    is_flag=True,
+    help="Recreate vector collection (deletes existing embeddings)",
+)
+@click.pass_context
+def embed_generate(ctx: click.Context, status: str, recreate: bool) -> None:
+    """Generate embeddings for papers and store in vector database."""
+    settings: Settings = ctx.obj["settings"]
+
+    from arxiv_corpus.embeddings import SemanticChunker, create_embedder, create_vector_store
+    from arxiv_corpus.storage import Database
+    from arxiv_corpus.storage.models import PaperStatus
+    from arxiv_corpus.utils.logging import ProgressLogger
+
+    db = Database(settings.database)
+
+    # Initialize components
+    embedder = create_embedder(settings.rag.embedding)
+    vector_store = create_vector_store(settings.rag.vector_store)
+    chunker = SemanticChunker(
+        config=settings.rag.chunking,
+        embedding_model=settings.rag.embedding.model,
+    )
+
+    # Create or recreate collection
+    if recreate:
+        console.print("[yellow]Recreating vector collection...[/yellow]")
+        vector_store.delete_collection()
+
+    vector_store.create_collection(embedder.dimension)
+
+    with db.session():
+        if status == "converted":
+            papers = list(db.get_papers_by_status(PaperStatus.CONVERTED))
+        else:
+            papers = [p for p in db.papers.find() if p.get("pdf_path")]
+
+        if not papers:
+            console.print("[yellow]No papers to embed.[/yellow]")
+            return
+
+        console.print(f"[bold]Embedding {len(papers)} papers[/bold]")
+        console.print(f"Model: {settings.rag.embedding.model}")
+
+        success = 0
+        failed = 0
+        total_chunks = 0
+
+        with ProgressLogger("Generating embeddings", total=len(papers)) as progress:
+            for paper_doc in papers:
+                paper = (
+                    paper_doc if hasattr(paper_doc, "arxiv_id") else type("Paper", (), paper_doc)()
+                )
+
+                try:
+                    pdf_path = (
+                        paper.pdf_path if hasattr(paper, "pdf_path") else paper_doc.get("pdf_path")
+                    )
+                    arxiv_id = (
+                        paper.arxiv_id if hasattr(paper, "arxiv_id") else paper_doc.get("arxiv_id")
+                    )
+                    paper_id = str(paper_doc.get("_id", arxiv_id))
+
+                    if not pdf_path:
+                        continue
+
+                    # Chunk the document
+                    chunks = chunker.chunk_document(pdf_path, arxiv_id, paper_id)
+
+                    if not chunks:
+                        continue
+
+                    # Generate embeddings
+                    texts = [c.contextualized_text for c in chunks]
+                    embeddings = embedder.embed_texts(texts)
+
+                    # Store in vector database
+                    vector_store.upsert(chunks, embeddings)
+
+                    # Update paper status
+                    db.update_paper(arxiv_id, {"status": PaperStatus.EMBEDDED.value})
+
+                    success += 1
+                    total_chunks += len(chunks)
+
+                except Exception as e:
+                    arxiv_id = (
+                        paper.arxiv_id
+                        if hasattr(paper, "arxiv_id")
+                        else paper_doc.get("arxiv_id", "unknown")
+                    )
+                    logger.error(f"Failed to embed {arxiv_id}: {e}")
+                    failed += 1
+
+                progress.update()
+
+        console.print(f"[green]Embedded: {success} papers, {total_chunks} chunks[/green]")
+        if failed:
+            console.print(f"[red]Failed: {failed}[/red]")
+
+
+@embed.command("stats")
+@click.pass_context
+def embed_stats(ctx: click.Context) -> None:
+    """Show embedding/vector store statistics."""
+    settings: Settings = ctx.obj["settings"]
+
+    from arxiv_corpus.embeddings import Retriever
+
+    retriever = Retriever(settings.rag)
+
+    try:
+        stats = retriever.stats()
+
+        table = Table(title="Embedding Statistics")
+        table.add_column("Metric", style="cyan")
+        table.add_column("Value", style="green")
+
+        table.add_row("Total Chunks", str(stats["total_chunks"]))
+        table.add_row("Embedding Model", stats["embedding_model"])
+        table.add_row("Embedding Dimension", str(stats["embedding_dimension"]))
+        table.add_row("Collection Name", stats["collection_name"])
+
+        console.print(table)
+
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+        console.print("[yellow]Make sure Qdrant is running: docker-compose up -d qdrant[/yellow]")
+
+
+@main.command()
+@click.argument("query")
+@click.option(
+    "--top-k",
+    "-k",
+    type=int,
+    default=10,
+    help="Number of results to return",
+)
+@click.option(
+    "--threshold",
+    "-t",
+    type=float,
+    default=0.0,
+    help="Minimum similarity score (0-1)",
+)
+@click.option(
+    "--paper",
+    "-p",
+    type=str,
+    help="Filter to specific paper (arXiv ID)",
+)
+@click.pass_context
+def search(ctx: click.Context, query: str, top_k: int, threshold: float, paper: str | None) -> None:
+    """Semantic search over the corpus.
+
+    Example: arxiv-corpus search "attention mechanisms in transformers"
+    """
+    settings: Settings = ctx.obj["settings"]
+
+    from arxiv_corpus.embeddings import Retriever
+
+    retriever = Retriever(settings.rag)
+
+    try:
+        paper_ids = [paper] if paper else None
+        response = retriever.search(
+            query=query,
+            top_k=top_k,
+            score_threshold=threshold,
+            paper_ids=paper_ids,
+        )
+
+        if not response.results:
+            console.print("[yellow]No results found.[/yellow]")
+            return
+
+        console.print(f"\n[bold]Query:[/bold] {query}")
+        console.print(f"[dim]Found {response.total_found} results[/dim]\n")
+
+        for result in response.results:
+            # Truncate text for display
+            text = result.chunk.text
+            if len(text) > 400:
+                text = text[:400] + "..."
+
+            console.print(f"[bold cyan]#{result.rank}[/bold cyan] ", end="")
+            console.print(f"[green]Score: {result.score:.4f}[/green]")
+            console.print(f"[dim]Paper:[/dim] {result.chunk.arxiv_id} ({result.arxiv_url})")
+
+            if result.chunk.headings:
+                console.print(f"[dim]Section:[/dim] {' > '.join(result.chunk.headings)}")
+
+            if result.chunk.page:
+                console.print(f"[dim]Page:[/dim] {result.chunk.page}")
+
+            console.print(f"\n{text}\n")
+            console.print("─" * 60)
+
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+        console.print("[yellow]Make sure Qdrant is running and embeddings are generated.[/yellow]")
+
+
 @main.command()
 def init() -> None:
     """Initialize a new project with default configuration."""

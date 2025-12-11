@@ -51,6 +51,7 @@ class PaperStatus(str, Enum):
     DISCOVERED = "discovered"
     DOWNLOADED = "downloaded"
     CONVERTED = "converted"  # Docling conversion complete
+    EMBEDDED = "embedded"  # Embeddings generated and stored in vector DB
     EXTRACTED = "extracted"  # Text extraction complete
     PROCESSED = "processed"  # NLP processing complete
     ERROR = "error"
